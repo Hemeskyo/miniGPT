@@ -3,7 +3,7 @@
 A compact (~14–16M parameter) decoder-only transformer implemented **from scratch in PyTorch**, using the same architectural building blocks as modern LLMs like Llama and Mistral.
 
 Trained and compared on two datasets:
-- **French Dostoyevsky** — a stylistic pastiche generator (and a live demonstration of overfitting).
+- **French Dostoïevski** — a stylistic pastiche generator (and a live demonstration of overfitting).
 - **TinyStories** — short coherent English stories, showing what a tiny model *can* do when the data matches its capacity.
 
 Training runs on cloud GPUs (RunPod), inference runs locally on Apple Silicon (MPS) — the first step toward my personal goal to master on-device deployment.
@@ -49,12 +49,12 @@ Checkpoints store the model weights **and** their config, so inference reconstru
 
 ## Results
 
-### Dostoyevsky — a lesson in overfitting
+### Dostoïevski — a lesson in overfitting
 A ~14M model on only **~2.4M tokens**. With so much capacity relative to the data, the model **overfits**: validation loss bottoms out around **3.38** (step ~2000) and then *rises* as the model starts memorizing.
 
 > *"Raskolnikov le regarda avec colère. — Oui, oui, j'ai voulu le tuer ! Je le connais ! cria-t-il, s'étant levé soudain… Raskolnikov prit sa casquette, s'assit sur le divan, tira le revolver."*
 
-Grammatical, stylistically convincing French with real Dostoyevsky characters (Raskolnikov, Sonia, the Prince, Lébédev) — but the *meaning* drifts. Exactly what a 14M model produces on a task that's too hard for its size: **style without semantics**.
+Grammatical, stylistically convincing French with real Dostoïevski characters (Raskolnikov, Sonia, the Prince, Lébédev) — but the *meaning* drifts. Exactly what a 14M model produces on a task that's too hard for its size: **style without semantics**.
 
 ### TinyStories — matching data to capacity
 A ~15.7M model on **~89M tokens** (35× more data). Now train and validation loss descend **together** with **no overfitting**, reaching a validation loss of **~1.67**. The model produces genuinely **coherent** short stories.
@@ -63,9 +63,9 @@ A ~15.7M model on **~89M tokens** (35× more data). Now train and validation los
 >
 > *The plane landed on the floor with a thud. The plane broke into pieces... Lily and Ben stopped fighting. They looked at the broken plane. They felt very sorry. "I'm sorry, Lily. I was greedy. I should have let you drive the plane," Ben said... They hugged and said they were sorry. They decided to share the plane and play together. They learned to share and to be kind to each other. They were happy and friends again.*
 >
-> A complete little story — arc, dialogue, and even a moral — from a ~15.7M-parameter model. Same architecture as the Dostoyevsky sample above; the difference is **data matched to model capacity**.
+> A complete little story — arc, dialogue, and even a moral — from a ~15.7M-parameter model. Same architecture as the Dostoïevski sample above; the difference is **data matched to model capacity**.
 
-**Takeaway:** the biggest lever for a small model isn't the architecture — it's having enough data for its capacity. The Dostoyevsky run *looks* impressive but overfits; the TinyStories run is actually coherent.
+**Takeaway:** the biggest lever for a small model isn't the architecture — it's having enough data for its capacity. The Dostoïevski run *looks* impressive but overfits; the TinyStories run is actually coherent.
 
 ---
 
