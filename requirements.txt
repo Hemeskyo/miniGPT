@@ -1,0 +1,2 @@
+tokenizers>=0.23
+wandb>=0.28

@@ -1,0 +1,25 @@
+# --- Data (never commit large corpora — regenerate with the scripts) ---
+*.txt
+*.json
+!requirements*.txt
+
+# --- Model checkpoints & weights ---
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# --- Experiment tracking & logs ---
+wandb/
+*.log
+
+# --- OS / editor ---
+.DS_Store
+.vscode/
+.idea/
