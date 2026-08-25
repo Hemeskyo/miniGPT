@@ -14,7 +14,7 @@
 venv/
 __pycache__/
 *.pyc
-
+*.npy
 # --- Experiment tracking & logs ---
 wandb/
 *.log

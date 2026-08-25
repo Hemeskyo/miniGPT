@@ -1,10 +1,11 @@
 # MiniGPT — a modern small language model, built from scratch
 
-A compact (~14–16M parameter) decoder-only transformer implemented **from scratch in PyTorch**, using the same architectural building blocks as modern LLMs like Llama and Mistral.
+A decoder-only transformer implemented **from scratch in PyTorch** — from a ~14M toy up to an **~88M base model** — using the same architectural building blocks as modern LLMs like Llama, Mistral and Qwen.
 
-Trained and compared on two datasets:
-- **French Dostoïevski** — a stylistic pastiche generator (and a live demonstration of overfitting).
-- **TinyStories** — short coherent English stories, showing what a tiny model *can* do when the data matches its capacity.
+Trained across three datasets:
+- **French Dostoïevski** (~14M) — a stylistic pastiche generator, and a live demonstration of *overfitting*.
+- **TinyStories** (~16M) — coherent little English stories: what a tiny model *can* do when the data matches its capacity.
+- **FineWeb-Edu** (~88M) — scaling up to a real GPT-2-class base model on diverse educational web text.
 
 Training runs on cloud GPUs (RunPod), inference runs locally on Apple Silicon (MPS) — the first step toward my personal goal to master on-device deployment.
 
@@ -14,19 +15,20 @@ Training runs on cloud GPUs (RunPod), inference runs locally on Apple Silicon (M
 
 ## Architecture (`model.py`)
 
-Every component below is implemented by hand. These are the same choices found in Llama-2/3 and Mistral.
+Every component below is implemented by hand. These are the same choices found in Llama-2/3, Mistral and Qwen.
 
 | Concept | What it is | Why it's here |
 |---|---|---|
-| **Grouped-Query Attention (GQA)** | 12 query heads share **4** key/value heads (3:1 ratio) | Shrinks the KV-cache and memory bandwidth vs. full multi-head attention, with almost no quality loss — critical for efficient inference |
+| **Grouped-Query Attention (GQA)** | Many query heads share fewer key/value heads (e.g. 12 Q for 4 KV) | Shrinks the KV-cache and memory bandwidth vs. full multi-head attention, with almost no quality loss — critical for efficient inference |
 | **Rotary Position Embeddings (RoPE)** | Positions encoded by *rotating* the query/key vectors | No learned positional table, encodes **relative** position, and composes cleanly with the KV-cache |
+| **QK-norm** | RMSNorm applied to queries & keys before attention | A recent trick (Qwen3, Gemma2) that stabilizes training, especially at larger scale |
 | **KV-cache** | Caches keys/values across generation steps | Each new token only computes its **own** attention instead of recomputing the whole sequence → turns O(n²) decoding into O(n). This is what makes on-device generation fast |
 | **SwiGLU feed-forward** | Gated MLP with a SiLU activation (hidden dim rounded to a multiple of 8) | Outperforms a plain ReLU/GELU MLP at the same parameter budget |
 | **RMSNorm** | LayerNorm without mean-subtraction or bias | Cheaper and just as stable; the Llama-family norm |
 | **Pre-norm residuals** | Normalize *before* attention/FFN | Stabler gradients in deep stacks |
 | **Weight tying** | Token embedding shares weights with the output head | Fewer parameters, better generalization |
 
-**Default config:** `embed_dim=384`, `num_layers=8`, `num_heads=12`, `num_kv_heads=4`, `ffn_dim=1536`, `block_size=256`.
+**Fully parameterized config** — the same code runs the ~14M toy (`embed_dim=384, num_layers=8, block_size=256`) and the ~88M base model (`embed_dim=768, num_layers=12, block_size=512`).
 
 ---
 
@@ -34,16 +36,17 @@ Every component below is implemented by hand. These are the same choices found i
 
 | Feature | Detail |
 |---|---|
-| **Cosine LR schedule + linear warmup** | Learning rate ramps up over 300 steps ("warm-up the motor"), then decays via cosine to a floor — the standard modern recipe |
+| **Cosine LR schedule + linear warmup** | Learning rate ramps up ("warm-up the motor"), then decays via cosine to a floor — the standard modern recipe |
 | **Gradient clipping** | Global norm clipped to 1.0 to prevent exploding gradients |
 | **bf16 mixed precision** | ~2× faster / half the memory on Ampere+ GPUs; auto-detected and disabled on unsupported hardware |
-| **`torch.compile`** | Optional kernel fusion for extra speed on capable GPUs |
+| **`torch.compile`** | Kernel fusion for extra speed on capable GPUs |
 | **Early stopping + best-checkpoint** | Saves the checkpoint at the **minimum** validation loss, and stops when validation stops improving (patience-based) |
+| **Token cache** | Tokenizes the corpus once and stores the ids as a compact `.npy` — later runs reload in seconds instead of re-tokenizing (~1.9 GB corpus went from ~15 min to seconds) |
 | **Automatic device selection** | CUDA → MPS (Apple Silicon) → CPU |
 | **Experiment tracking** | Weights & Biases (loss curves, learning rate, eval metrics) |
 | **AdamW** optimizer, dropout `0.2` | |
 
-Checkpoints store the model weights **and** their config, so inference reconstructs the exact architecture with no hard-coded hyperparameters.
+Checkpoints store the model weights **and** their config, so inference reconstructs the exact architecture with no hard-coded hyperparameters. Generation (`generate.py`) is autoregressive with the KV-cache and supports **temperature, top-k and top-p (nucleus)** sampling.
 
 ---
 
@@ -65,21 +68,25 @@ A ~15.7M model on **~89M tokens** (35× more data). Now train and validation los
 >
 > A complete little story — arc, dialogue, and even a moral — from a ~15.7M-parameter model. Same architecture as the Dostoïevski sample above; the difference is **data matched to model capacity**.
 
-**Takeaway:** the biggest lever for a small model isn't the architecture — it's having enough data for its capacity. The Dostoïevski run *looks* impressive but overfits; the TinyStories run is actually coherent.
+### FineWeb-Edu — scaling up to a real base model
+An **~88M** model on **~470M tokens** of diverse educational web text (FineWeb-Edu), trained on an A40 with bf16 + `torch.compile` + **QK-norm** for stability. Validation loss descends steadily to **~3.4** with train and val tracking closely — a genuine (if undertrained) GPT-2-class base model.
+
+**Takeaway:** the same hand-built architecture scales from a 14M toy to an 88M base model. The main lever for a small model is **data**, not architecture — Dostoïevski *looks* impressive but overfits, TinyStories is coherent, and FineWeb-Edu shows the pretraining recipe holding as the model grows.
 
 ---
 
 ## Project structure
 
 ```
-model.py                 # The transformer: GQA, RoPE, RMSNorm, SwiGLU, KV-cache
-train.py                 # Training loop: LR schedule, bf16, early stopping, wandb
+model.py                 # The transformer: GQA, RoPE, QK-norm, RMSNorm, SwiGLU, KV-cache
+train.py                 # Training loop: LR schedule, bf16, token cache, early stopping, wandb
 dataset.py               # Random-window batch sampler
 tokenizer.py             # ByteLevel BPE tokenizer wrapper
 train_tokenizer.py       # Trains the BPE tokenizer on a corpus
-generate.py              # Interactive CLI generation (uses the KV-cache)
+generate.py              # Interactive CLI generation (KV-cache, top-k / top-p sampling)
 clean_corpus.py          # Cleans/assembles raw text (hyphenation, wrapping, BOM, Gutenberg headers)
 prepare_tinystories.py   # Streams a TinyStories subset into a training corpus
+prepare_fineweb.py       # Streams a FineWeb-Edu subset into a training corpus
 ```
 
 ---
@@ -89,10 +96,10 @@ prepare_tinystories.py   # Streams a TinyStories subset into a training corpus
 ```bash
 # 1. Setup
 python -m venv .venv && source .venv/bin/activate
-pip install torch tokenizers wandb datasets
+pip install torch tokenizers wandb datasets numpy
 
 # 2. Prepare a corpus
-python prepare_tinystories.py          # TinyStories  (or use clean_corpus.py for your own texts)
+python prepare_fineweb.py          # FineWeb-Edu  (or prepare_tinystories.py / clean_corpus.py)
 
 # 3. Train the tokenizer on it
 python train_tokenizer.py
@@ -108,12 +115,10 @@ python generate.py
 
 ## What I learned
 
-- How a Transformer actually works — going from "what's an attention head?" to implementing GQA, RoPE and a KV-cache by hand.
+- How a Transformer actually works — going from "what's an attention head?" to implementing GQA, RoPE, QK-norm and a KV-cache by hand.
 - Building the modern transformer stack (GQA, RoPE, SwiGLU, KV-cache) instead of importing it.
 - **Reading loss curves**: watching overfitting happen live (train ↓ while val ↑) and fixing it with early stopping + more data.
 - The KV-cache as the key to fast, on-device inference.
 - The real bottleneck for a small model is **data**, not compute or VRAM.
+- Scaling the *same* architecture from a 14M toy to an **88M base model** on real web data (FineWeb-Edu) — and why bigger models need more data and stabilizers like QK-norm.
 - The full ML loop end-to-end: data cleaning → tokenizer → cloud GPU training (bf16, `torch.compile`) → checkpoint export → local inference.
-
----
-
