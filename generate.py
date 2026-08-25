@@ -1,3 +1,6 @@
+# Interactive CLI to generate text from a trained model.
+# Loads a checkpoint and rebuilds the EXACT architecture from the saved config
+# (no hard-coded hyperparameters), then generates token-by-token with the KV-cache.
 import os
 import torch
 from model import MiniGPT
@@ -6,7 +9,7 @@ from tokenizer import BPETokenizerWrapper
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
 
-checkpoint_path = "tinystories_gpt.pt"
+checkpoint_path = "fineweb_gpt.pt"
 if not os.path.exists(checkpoint_path):
     raise FileNotFoundError(f"Weight not found. Please train the model before")
 
@@ -30,15 +33,18 @@ model.eval()
 
 
 print("=" * 60)
-print("Welcome to Tinystories GPT (CLI mode)")
+print("Welcome to Fineweb GPT (CLI mode)")
 total_params = sum(p.numel() for p in model.parameters())
 print(f"Total number of parameters: {total_params:,}")
 
 print("Type 'exit' to exit")
 print("=" * 60)
 
-temperature = 0.6
-top_k = 20
+# Sampling settings: lower temperature / top_k / top_p = safer & more coherent,
+# higher = more diverse (see model.generate for how each one filters the logits)
+temperature = 0.8
+top_k = 40
+top_p = 0.95
 max_tokens = 200
 
 while True:
@@ -53,11 +59,11 @@ while True:
         raw_ids = tokenizer.encode(prompt)
         idx = torch.tensor([raw_ids], dtype=torch.long, device=device)
 
-        print(f"\n--- Génération en cours (Temp: {temperature} | Top-K: {top_k} ---)")
+        print(f"\n--- Generation started (Temp: {temperature} | Top-K: {top_k} ---)")
 
         with torch.no_grad():
             generated_idxs = model.generate(
-                idx, max_new_tokens=max_tokens, temperature=temperature, top_k=top_k
+                idx, max_new_tokens=max_tokens, temperature=temperature, top_k=top_k, top_p=top_p
             )
 
         result = tokenizer.decode(generated_idxs[0].tolist())

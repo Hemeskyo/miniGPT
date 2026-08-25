@@ -1,3 +1,5 @@
+# Trains a ByteLevel BPE tokenizer on the corpus and saves it to JSON.
+# Byte-level = every byte is a valid token start, so there are no unknown chars.
 from tokenizers import Tokenizer, pre_tokenizers, processors, decoders, trainers
 from tokenizers.models import BPE
 from tokenizers.pre_tokenizers import Whitespace
@@ -10,13 +12,13 @@ tokenizer.decoder = decoders.ByteLevel()
 special_tokens = ["[UNK]", "[PAD]", "[BOS]", "[EOS]"]
 
 trainer = trainers.BpeTrainer(
-    vocab_size=8192,
+    vocab_size=16384,
     special_tokens=special_tokens,
     initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
 )
 
-files = ["tinystories_corpus.txt"]
+files = ["fineweb_corpus.txt"]
 tokenizer.train(files, trainer)
 
-tokenizer.save("tinystories_tokenizer.json")
-print("Tokenizer BPE for Tinystories created successfully.")
+tokenizer.save("fineweb_tokenizer.json")
+print("Tokenizer BPE for fineweb created successfully.")

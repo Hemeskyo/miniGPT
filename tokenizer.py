@@ -1,8 +1,10 @@
 from tokenizers import Tokenizer
 
 
+# Thin wrapper around a trained ByteLevel BPE tokenizer.
+# encode: text -> list of token ids   |   decode: token ids -> text
 class BPETokenizerWrapper:
-    def __init__(self, json_path="tinystories_tokenizer.json"):
+    def __init__(self, json_path="fineweb_tokenizer.json"):
         self.tokenizer = Tokenizer.from_file(json_path)
         self.vocab_size = self.tokenizer.get_vocab_size()
 

@@ -4,6 +4,7 @@ import wandb
 import torch
 import array
 
+import numpy as np
 from model import MiniGPT
 from tokenizer import BPETokenizerWrapper
 from dataset import get_batch
@@ -26,39 +27,52 @@ else:
 
 print(f"Mixed precision (bf16): {use_amp}")
 
-with open("tinystories_corpus.txt", "r", encoding="utf-8") as f:
+with open("fineweb_corpus.txt", "r", encoding="utf-8") as f:
     text = f.read()
 
 print(f"Text size is: {len(text):,} chars")
 
 tokenizer = BPETokenizerWrapper()
-CHUNK = 5_000_000
-ids = array.array("i")
-for i in range(0, len(text), CHUNK):
-    ids.extend(tokenizer.encode(text[i : i + CHUNK]))
-    print(f"  tokenizing... {i // CHUNK + 1}/{len(text) // CHUNK + 1}")
-data = torch.tensor(ids, dtype=torch.long)
-n = int(0.9 * len(data))
-train_data = data[:n]
-val_data = data[n:]
+
+# --- Token cache (tokenize once, reuse forever) ---
+# Tokenizing the ~1.9 GB corpus takes ~10-15 min, so we do it ONCE and save the
+# token ids to disk as a compact uint16 array (fine since vocab < 65536). Every
+# later run just reloads the .npy in seconds instead of re-tokenizing from text.
+TOKENS_CACHE = "fineweb_tokens.npy"
+
+if os.path.exists(TOKENS_CACHE):
+    # Fast path: reload the pre-tokenized corpus (int64 for the embedding lookup)
+    print("Loading cached tokens...")
+    data = torch.from_numpy(np.load(TOKENS_CACHE).astype(np.int64))
+else:
+    # Slow path (first run): tokenize in 5M-char chunks to keep RAM bounded,
+    # then cache the result to disk for next time
+    CHUNK = 5_000_000
+    ids = array.array("i")
+    for i in range(0, len(text), CHUNK):
+        ids.extend(tokenizer.encode(text[i : i + CHUNK]))
+        print(f"  tokenizing... {i // CHUNK + 1}/{len(text) // CHUNK + 1}")
+    np.save(TOKENS_CACHE, np.array(ids, dtype=np.uint16))
+    data = torch.tensor(ids, dtype=torch.long)
+    print(f"Saved token cache -> {TOKENS_CACHE}")
 
 
 wandb.init(
-    project="TinystoriesGPT",
+    project="Fineweb",
     config={
-        "block_size": 256,
+        "block_size": 512,
         "batch_size": 64,
-        "embed_dim": 384,
-        "ffn_dim": 1536,
+        "embed_dim": 768,
+        "ffn_dim": 3072,
         "num_heads": 12,
         "num_kv_heads": 4,
-        "num_layers": 8,
+        "num_layers": 12,
         "max_lr": 4e-4,
         "min_lr": 4e-5,
-        "warmup_steps": 300,
-        "steps": 15000,
+        "warmup_steps": 700,
+        "steps": 30000,
         "grad_clip": 1.0,
-        "checkpoint_path": "tinystories_gpt.pt",
+        "checkpoint_path": "fineweb_gpt.pt",
     },
 )
 
@@ -87,8 +101,7 @@ raw_model = MiniGPT(
     num_layers=config.num_layers,
 ).to(device)
 
-# model = torch.compile(raw_model) if device.type == "cuda" else raw_model
-model = raw_model
+model = torch.compile(raw_model) if device.type == "cuda" else raw_model
 
 if os.path.exists(config.checkpoint_path):
     print(f"Found an existing checkpoint. Loading weights...")
@@ -173,7 +186,7 @@ for step in range(config.steps):
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                print(f("Early stopping : val is stagnating since {patience} evals"))
+                print(f"Early stopping : val is stagnating since {patience} evals")
                 break
 
     wandb.log(metrics)
