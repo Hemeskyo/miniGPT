@@ -1,3 +1,7 @@
+# Fine-tuning script (instruction-tuning the pretrained base model).
+# Differs from train.py in 3 ways: it LOADS the pretrained weights instead of
+# starting from scratch, uses a much LOWER learning rate + FEW steps (a gentle
+# nudge, not a retrain), and trains on the instruction corpus.
 import math
 import os
 import wandb
@@ -27,18 +31,17 @@ else:
 
 print(f"Mixed precision (bf16): {use_amp}")
 
-with open("fineweb_corpus.txt", "r", encoding="utf-8") as f:
+with open("instruct_corpus.txt", "r", encoding="utf-8") as f:
     text = f.read()
 
 print(f"Text size is: {len(text):,} chars")
 
 tokenizer = BPETokenizerWrapper()
 
-# --- Token cache (tokenize once, reuse forever) ---
-# Tokenizing the ~1.9 GB corpus takes ~10-15 min, so we do it ONCE and save the
-# token ids to disk as a compact uint16 array (fine since vocab < 65536). Every
-# later run just reloads the .npy in seconds instead of re-tokenizing from text.
-TOKENS_CACHE = "fineweb_.npy"
+# --- Token cache (tokenize once, reuse) ---
+# Tokenize the (small) instruction corpus once and cache the ids as a compact
+# uint16 .npy, so later runs reload in seconds instead of re-tokenizing.
+TOKENS_CACHE = "instruct_tokens_.npy"
 
 if os.path.exists(TOKENS_CACHE):
     # Fast path: reload the pre-tokenized corpus (int64 for the embedding lookup)
@@ -60,22 +63,25 @@ n = int(0.9 * len(data))
 train_data = data[:n]
 val_data = data[n:]
 
+# Fine-tuning hyperparameters: a LOW learning rate (~1/10 of pretraining) and
+# FEW steps — a gentle nudge that adds instruction-following behaviour without
+# overwriting the base model's knowledge (catastrophic forgetting).
 wandb.init(
     project="Fineweb",
     config={
         "block_size": 512,
-        "batch_size": 64,
+        "batch_size": 32,
         "embed_dim": 768,
         "ffn_dim": 3072,
         "num_heads": 12,
         "num_kv_heads": 4,
         "num_layers": 12,
-        "max_lr": 4e-4,
-        "min_lr": 4e-5,
-        "warmup_steps": 700,
-        "steps": 30000,
+        "max_lr": 5e-5,
+        "min_lr": 5e-6,
+        "warmup_steps": 100,
+        "steps": 2000,
         "grad_clip": 1.0,
-        "checkpoint_path": "fineweb_gpt.pt",
+        "checkpoint_path": "fineweb_instruct.pt",
     },
 )
 
@@ -106,12 +112,12 @@ raw_model = MiniGPT(
 
 model = torch.compile(raw_model) if device.type == "cuda" else raw_model
 
-if os.path.exists(config.checkpoint_path):
-    print(f"Found an existing checkpoint. Loading weights...")
-    ckpt = torch.load(config.checkpoint_path, map_location=device)
-    raw_model.load_state_dict(ckpt["model"])
-else:
-    print(f"No checkpoint found. Starting training from scratch.")
+# THE key difference from train.py: we start from the pretrained base model's
+# weights (not from scratch), then keep training gently on the instruction data.
+ckpt = torch.load("fineweb_gpt.pt", map_location=device)
+raw_model.load_state_dict(ckpt["model"])
+print("Loaded base model fineweb_gpt.pt for fine-tuning.")
+
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=config.max_lr)
 total_params = sum(p.numel() for p in model.parameters())

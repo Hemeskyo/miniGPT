@@ -42,10 +42,10 @@ print("=" * 60)
 
 # Sampling settings: lower temperature / top_k / top_p = safer & more coherent,
 # higher = more diverse (see model.generate for how each one filters the logits)
-temperature = 0.9
+temperature = 0.6
 top_k = 20
 top_p = 0.95
-max_tokens = 50
+max_tokens = 150
 repetion_penalty = 1.3
 
 while True:

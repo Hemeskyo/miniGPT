@@ -78,6 +78,11 @@ An **~88M** model on **~470M tokens** of diverse educational web text (FineWeb-E
 
 **Takeaway:** the same hand-built architecture scales from a 14M toy to an 88M base model. The main lever for a small model is **data**, not architecture — Dostoïevski *looks* impressive but overfits, TinyStories is coherent, and FineWeb-Edu shows the pretraining recipe holding as the model grows.
 
+### Instruction fine-tuning — the pretrain → fine-tune paradigm
+Continuing training on the 88M base with an instruction dataset (Alpaca) at a **low learning rate** — the recipe that turns a base model into an assistant. `finetune.py` loads the pretrained weights instead of starting from scratch.
+
+The behaviour visibly shifts: the base model just *continues* text, while the fine-tuned model adopts the `### Instruction / ### Response` format. But at 88M it learns the *format*, not real instruction-following — a hands-on demonstration that **the pretrain→fine-tune mechanism works, but useful instruction-following needs scale** (real assistants fine-tune 1B+ models). Next step: QLoRA on a larger pretrained model.
+
 ---
 
 ## Project structure
@@ -89,9 +94,11 @@ dataset.py               # Random-window batch sampler
 tokenizer.py             # ByteLevel BPE tokenizer wrapper
 train_tokenizer.py       # Trains the BPE tokenizer on a corpus
 generate.py              # Interactive CLI generation (KV-cache, top-k / top-p sampling)
+finetune.py              # Instruction fine-tuning: loads the base model, low LR, few steps
 clean_corpus.py          # Cleans/assembles raw text (hyphenation, wrapping, BOM, Gutenberg headers)
 prepare_tinystories.py   # Streams a TinyStories subset into a training corpus
 prepare_fineweb.py       # Streams a FineWeb-Edu subset into a training corpus
+prepare_instruct.py      # Streams the Alpaca instruction dataset into a training corpus
 ```
 
 ---
@@ -127,3 +134,4 @@ python generate.py
 - The real bottleneck for a small model is **data**, not compute or VRAM.
 - Scaling the *same* architecture from a 14M toy to an **88M base model** on real web data (FineWeb-Edu) — and why bigger models need more data and stabilizers like QK-norm.
 - The full ML loop end-to-end: data cleaning → tokenizer → cloud GPU training (bf16, `torch.compile`) → checkpoint export → local inference.
+- **Fine-tuning hands-on**: instruction-tuning the base shifts its *behaviour* (base rambles → fine-tuned adopts the Q&A format), but 88M is too small for real instruction-following — the mechanism works, usefulness needs scale.
