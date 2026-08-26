@@ -42,10 +42,11 @@ print("=" * 60)
 
 # Sampling settings: lower temperature / top_k / top_p = safer & more coherent,
 # higher = more diverse (see model.generate for how each one filters the logits)
-temperature = 0.8
-top_k = 40
+temperature = 0.9
+top_k = 20
 top_p = 0.95
-max_tokens = 200
+max_tokens = 500
+repetion_penalty = 1.3
 
 while True:
     try:
@@ -63,7 +64,12 @@ while True:
 
         with torch.no_grad():
             generated_idxs = model.generate(
-                idx, max_new_tokens=max_tokens, temperature=temperature, top_k=top_k, top_p=top_p
+                idx,
+                max_new_tokens=max_tokens,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetion_penalty,
             )
 
         result = tokenizer.decode(generated_idxs[0].tolist())

@@ -258,9 +258,18 @@ class MiniGPT(nn.Module):
     # --- Autoregressive generation (the KV-cache in action) ---
     # First call encodes the whole prompt and fills the cache; afterwards only
     # the LAST token is fed in (idx[:, -1:]) and attention reuses the cache.
-    # Sampling: temperature reshapes the distribution, top_k restricts candidates.
+    # Sampling pipeline applied to the last position's logits, in order:
+    # repetition penalty -> temperature -> top-k -> top-p -> softmax -> sample.
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, top_p=None):
+    def generate(
+        self,
+        idx,
+        max_new_tokens,
+        temperature=1.0,
+        top_k=None,
+        top_p=None,
+        repetition_penalty=1.0,
+    ):
         # Crop a prompt that is already longer than the context window
         if idx.size(1) > self.max_seq_len:
             idx = idx[:, -self.max_seq_len :]
@@ -273,7 +282,20 @@ class MiniGPT(nn.Module):
 
             logits, _, kv_caches = self(idx_cond, kv_caches=kv_caches)
 
+            # Keep only the LAST position's scores -> (B, vocab) = next-token logits
             logits = logits[:, -1, :]
+
+            # Repetition penalty: push down the logit of every token already used
+            # (set(idx[b]) = the token history) so the model stops looping.
+            # Divide if the logit is >0, multiply if <0 — either way it moves the
+            # score toward "less likely", whatever its sign.
+            if repetition_penalty != 1.0:
+                for b in range(idx.size(0)):
+                    for tok in set(idx[b].tolist()):
+                        if logits[b, tok] > 0:
+                            logits[b, tok] /= repetition_penalty
+                        else:
+                            logits[b, tok] *= repetition_penalty
 
             logits = logits / temperature
 
