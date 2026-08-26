@@ -45,7 +45,7 @@ print("=" * 60)
 temperature = 0.9
 top_k = 20
 top_p = 0.95
-max_tokens = 500
+max_tokens = 50
 repetion_penalty = 1.3
 
 while True:

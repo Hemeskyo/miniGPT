@@ -69,7 +69,12 @@ A ~15.7M model on **~89M tokens** (35× more data). Now train and validation los
 > A complete little story — arc, dialogue, and even a moral — from a ~15.7M-parameter model. Same architecture as the Dostoïevski sample above; the difference is **data matched to model capacity**.
 
 ### FineWeb-Edu — scaling up to a real base model
-An **~88M** model on **~470M tokens** of diverse educational web text (FineWeb-Edu), trained on an A40 with bf16 + `torch.compile` + **QK-norm** for stability. Validation loss descends steadily to **~3.4** with train and val tracking closely — a genuine (if undertrained) GPT-2-class base model.
+An **~88M** model on **~470M tokens** of diverse educational web text (FineWeb-Edu), trained on an A40 with bf16 + `torch.compile` + **QK-norm** for stability. Validation loss descends steadily to a best of **3.33** with train and val tracking closely — a genuine (if undertrained) GPT-2-class base model.
+
+![Training dashboard — train batch loss, learning rate, eval train/val loss](assets/training_dashboard.png)
+![Train batch loss](assets/train_loss.png)
+
+*Loss over the FineWeb-Edu run — resumed from a checkpoint after a mid-run disconnect, so the curves start around ~4.0 (the full run went from ~9.7 to a best validation loss of **3.33**). Train and validation track closely: no overfitting even past one epoch.*
 
 **Takeaway:** the same hand-built architecture scales from a 14M toy to an 88M base model. The main lever for a small model is **data**, not architecture — Dostoïevski *looks* impressive but overfits, TinyStories is coherent, and FineWeb-Edu shows the pretraining recipe holding as the model grows.
 
